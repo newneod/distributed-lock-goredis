@@ -16,13 +16,18 @@ const (
 	DistributedLockTimeout = 5       // timeout for lock, unit:second
 )
 
-func Lock(lockType string) (string, error) {
+// @param lockName string 锁名（唯一区分不同锁业务）
+// @return strUUID string 锁UUID
+// @return err error
+func Lock(lockName string) (string, error) {
 	if conn == nil {
-		log.Fatal("Please init redis connection first.")
+		err := errors.New("Please init redis connection first.")
+		log.Fatal(err)
+		return "", err
 	}
 
 	ctx := context.TODO()
-	strLockName := strings.Join([]string{DistributedLockPrefix, lockType}, "")
+	strLockName := strings.Join([]string{DistributedLockPrefix, lockName}, "")
 	strUUID := uuid.NewV4().String()
 	timeout := DistributedLockTimeout * time.Second
 	iTimeBegin := time.Now().Unix()
@@ -49,13 +54,16 @@ func Lock(lockType string) (string, error) {
 		if time.Now().Unix()-iTimeBegin > DistributedLockTimeout {
 			return "", errors.New("Operation timeout, please try again.")
 		}
-		time.Sleep(time.Microsecond * 1)
+		time.Sleep(time.Microsecond * 10)
 	}
 }
 
-func Unlock(lockType string, strUUID string) error {
+// @param lockName string 锁名（唯一区分不同锁业务）
+// @param strUUID string 锁UUID
+// @return err error
+func Unlock(lockName string, strUUID string) error {
 	ctx := context.TODO()
-	strLockName := strings.Join([]string{DistributedLockPrefix, lockType}, "")
+	strLockName := strings.Join([]string{DistributedLockPrefix, lockName}, "")
 	replyGet := conn.Get(ctx, strLockName)
 	if replyGet.Err() != nil {
 		return replyGet.Err()
@@ -72,7 +80,7 @@ func Unlock(lockType string, strUUID string) error {
 		return err
 	}
 	if err := conn.Watch(ctx, tx, strLockName); err != nil {
-		return errors.New("The lock is currently unlocked by someone else.")
+		return errors.New("The lock currently belongs to someone else, you cannot unlock it.")
 	}
 	return nil
 }
